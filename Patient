@@ -1,0 +1,467 @@
+*********************************************************************** 
+Program Name: Import MAUDE Patient 
+
+Date Last Modified: 07-JULY-2014
+
+Purpose: To read in FDA MAUDE patient files. Separates the composite
+         outcome variable into a parsed outcome and
+         creates indicator variables for each outcome.
+
+Inputs:  00 Pathnames and Options.sas
+         patientthru2013.txt
+         patient.txt (2013 records)
+         patientChange.txt 
+         patientadd.txt (for validation checking) 
+
+SAS Data Outputs: patientthru2013_raw
+                  patientchange
+                  patientthru2013
+                  patientthru2013_trans
+                  ptthru2013_parsed_out
+
+----------------------------------------------------------------------- 
+Macros:  importpt   - to standardize data import
+         countptout - counts number of outcomes a patient has
+         verify     - prints out a select sample of records having
+                      different attributes to faciliate verification
+         ptout      - parse the MAUDE outcome variable into its for 
+                      each associated pt_seq_no
+         dataobssub - finds those records having fewer outcomes than
+                      pt_seq_no's 
+         ptout      - parse the MAUDE outcome variable into its for 
+*********************************************************************;
+
+**********************************************************************
+Read in base patient data file. Informat and Format lengths were first
+determined using proc import, selefirscting the maximum value for each 
+variable and then adding a pad (approx 10%) to account for future file
+uploads having a greater length. The SAS log was also reviewed and
+variable lengths adjusted if the maximum record length indicated
+truncation occurred.
+*********************************************************************;
+
+%macro importpt (outdata,indata);
+data &outdata (index=(MDR_Report_Key Pt_Seq_No MDR_PT=(MDR_Report_Key Pt_Seq_No)));
+  %let _EFIERR_ = 0; /* set the ERROR detection variable */
+  infile "&MAUDE\&indata"
+  delimiter = '|' MISSOVER DSD lrecl=32760 TERMSTR=CRLF;
+
+  informat MDR_Report_Key best32. ;
+  informat Pt_Seq_No best32. ;
+  informat Date_Rcvd DATE9. ;
+  informat Treatment $3000. ;
+  informat Outcome $250. ;
+
+  format MDR_Report_Key best12. ;
+  format Pt_Seq_No best12. ;
+  format Date_Rcvd DATE9. ;
+  format Treatment $3000. ;
+  format Outcome $250. ;
+
+  input
+    MDR_Report_Key
+    Pt_Seq_No
+    Date_Rcvd
+    Treatment $
+    Outcome $
+     ;
+  if _ERROR_ then call symputx('_EFIERR_',1);  /* set ERROR detection variable */
+  if MDR_Report_Key = 840796 then Outcome = "1,U;"; /* set the single patient having an outcome "unknown" to the designated MAUDE structure */
+run;
+
+proc contents data=&outdata order=varnum;
+run;
+
+proc print data=&outdata (obs=100);
+run;
+
+*Compare lowest and highest observations to txt file to ensure all recrods are included;
+	proc univariate data=&outdata;
+	  var MDR_Report_Key;
+	run;
+
+%mend;
+
+%importpt(base.patientthru2013_raw,patientThru2013.txt);
+
+/* Combine patientthru#### and current year files - update file name extensions below as necesary */
+/*
+
+%importpt(base.patient2013,patient.txt);
+
+data patientthru2013 (index=(MDR_Report_Key Pt_Seq_No MDR_PT=(MDR_Report_Key Pt_Seq_No))) bothmatch;
+  merge base.patientthru2012 (in=x) base.patient2013 (in=y);
+  by MDR_Report_Key Pt_Seq_No;
+  if x then from = 'ptthru2012';
+  if y then from = 'pt2013';
+  if x=1 and y=1 then output bothmatch;
+  else output patientthru2013;
+run;
+*/
+
+**********************************************************************
+Read in patient update data files.
+*********************************************************************;
+
+%importpt(base.patientChange,patientChange.txt);
+
+
+*Examine when report was received for the base and updated files;
+proc freq data=base.patientthru2013_raw;
+  tables Date_Rcvd / missing;
+  format Date_Rcvd year.;
+run; 
+proc freq data=base.patientchange;
+  tables Date_Rcvd / missing;
+  format Date_Rcvd year.;
+run; 
+
+**********************************************************************
+Merge the base and updated data sets, keeping only patientchange
+records that match those in the base patientthru2013 dataset.
+*********************************************************************;
+
+*Determine records to merge;
+data base (index=(MDR_Report_Key Pt_Seq_No MDR_PT=(MDR_Report_Key Pt_Seq_No)));
+  set patientthru2013;
+run;
+data ptchange_match changeonly;
+  merge base.patientthru2013_raw(in=b) base.patientchange(in=c);
+  by MDR_Report_Key Pt_Seq_No;
+  if b=1 and c=1 then output ptchange_match;
+  else if b=0 and c=1 then output changeonly;
+run;
+
+	*Note - verified that Change records not included are those matching records from 2014;;
+	%importpt(patientadd, patientadd.txt);
+
+	data all_match base_and_change base_and_add baseonly change_and_add changeonly addonly none;
+	  merge base.patientthru2013_raw(in=b) base.patientchange(in=c) patientadd (in=d);
+	  by MDR_Report_Key;
+	  if b=1 and c=1 and d=1 then output all_match;
+	  if b=1 and c=1 and d=0 then output base_and_change;
+	  if b=1 and c=0 and d=1 then output base_and_add;
+	  if b=1 and c=0 and d=0 then output baseonly;
+	  if b=0 and c=1 and d=1 then output change_and_add;
+	  if b=0 and c=1 and d=0 then output changeonly;
+	  if b=0 and c=0 and d=1 then output addonly;
+	  if b=0 and c=0 and d=0 then output none;
+	run;
+
+proc print data=ptchange_match (obs=10);
+run;
+proc print data=patientthru2013 (obs=10);
+run;
+
+*Update patientthru2013 with ptchange_match records;
+data base.patientthru2013 (index=(MDR_Report_Key Pt_Seq_No MDR_PT=(MDR_Report_Key Pt_Seq_No)));
+  update base.patientthru2013_raw ptchange_match;
+  by MDR_Report_Key Pt_Seq_No;
+run;
+
+*Re-check when report was received for the updated file. NOTE: 183 records have missing Date_Rcvd, the
+ majority (n=163) are old records with MDR_Report_Key <=2004;
+proc freq data=base.patientthru2013;
+  tables Date_Rcvd / missing;
+  format Date_Rcvd year.;
+run; 
+
+proc contents data=base.patientthru2013;
+run;
+
+**********************************************************************
+Keep (only) final variables of potential interest in analysis
+Treatment not informative for dissertation analysis purposes
+*********************************************************************;
+
+data thesis.patientthru2013 (index=(MDR_Report_Key Pt_Seq_No MDR_PT=(MDR_Report_Key Pt_Seq_No)));
+  set base.patientthru2013 (drop=Treatment);
+run;
+proc contents data=thesis.patientthru2013;
+run;
+
+/*********************** Exloring data ******************************/
+
+proc print data=thesis.patientthru2013 (obs=50);
+  where Outcome ne "";
+run;
+
+proc freq data=thesis.patientthru2013;
+  table pt_seq_no / missing;
+run;
+
+proc print data=thesis.patientthru2013 (obs=20);
+  where pt_seq_no > 1 and outcome ne '';
+run;
+
+/* Explore number of outcomes recorded for each patient: 
+   5235 records containt '4', 1698 records contain '5', 89
+   records contain '6', 13 records ccontain '7', 0
+   records contain '8' or more */
+
+%macro countptout(outdata, count);
+data &outdata;
+  set thesis.patientthru2013;
+  where outcome contains "&count";
+run;
+%mend;
+
+%countptout(pt4,4);
+%countptout(pt5,5);
+%countptout(pt6,6);
+%countptout(pt7,7);
+%countptout(pt8,8);
+
+proc print data=pt7;
+run;
+
+/*********************** *******************************************
+Transpose data from long to wide - where each outcome is represented
+as a separate variable for a given MDR_Report_Key and Date combo    
+*******************************************************************/
+
+proc transpose data=thesis.patientthru2013 out=patientthru2013_trans (drop=_name_) prefix=outtemp_;
+  by MDR_Report_Key Date_Rcvd;
+  var outcome;
+  id pt_seq_no;
+run;
+
+	* Create macro to verify across a variety of records;
+	%macro verify(indata);
+    proc print data=&indata;
+	  id MDR_Report_Key;
+      where MDR_Report_Key = 66307  or MDR_Report_Key = 126793 or MDR_Report_Key = 233432 or
+	        MDR_Report_Key = 257625 or MDR_Report_Key = 47584  or MDR_Report_Key = 309248 or
+			MDR_Report_Key = 383836 or MDR_Report_Key = 663141 or MDR_Report_Key = 724756 or
+			MDR_Report_Key = 10103  or MDR_Report_Key = 42;
+    run;
+    %mend;
+
+	proc contents data=patientthru2013_trans varnum;
+	run;
+
+	%verify(patientthru2013_trans);
+	%verify(thesis.patientthru2013);
+
+/*The MAUDE Outcome variable is a growing concatenation of each
+  outcome/pt_seq_no within a given MDR_Report_Key. For example,
+  for MDR_Report_Key=47584
+
+MDR_Report_Key Pt_Seq_No Date_Rcvd Outcome
+
+47584 1 30OCT1996 1,H;2,R;3,O; 
+47584 2 30OCT1996 1,H;1,H;2,R;3,O; 
+47584 3 30OCT1996 1,H;2,O;1,H;1,H;2,R;3,O; 
+47584 4 30OCT1996 1,H;2,O;1,H;2,O;1,H;1,H;2,R;3,O; 
+47584 5 30OCT1996 1,H;2,O;1,H;2,O;1,H;2,O;1,H;1,H;2,R;3,O; 
+47584 6 30OCT1996 1,O;1,H;2,O;1,H;2,O;1,H;2,O;1,H;1,H;2,R;3,O; 
+47584 7 30OCT1996 1,O;1,O;1,H;2,O;1,H;2,O;1,H;2,O;1,H;1,H;2,R;3,O; 
+47584 8 30OCT1996 1,O;1,O;1,O;1,H;2,O;1,H;2,O;1,H;2,O;1,H;1,H;2,R;3,O; 
+47584 9 30OCT1996 1,O;1,O;1,O;1,O;1,H;2,O;1,H;2,O;1,H;2,O;1,H;1,H;2,R;3,O; 
+
+The outcome for pt_seq_no 9 is a composite of the outcome for pt_seq_no 9 = 1,0; | pt_seq_no 8 = 1,0; | pt_seq_no 7 = 1,0;  | pt_seq_no 6 = 1,0; | pt_seq_no 5 = 1,H;2,O; | pt_seq_no 4 = 1,H;2,O; | pt_seq_no 3 = 1,H;2,O; | pt_seq_no 2 = 1,H; | pt_seq_no 1 = 1,H;2,R;3,O; 
+
+So need to parse the MAUDE outcome variable into its residual parts.
+The following macro accomplishes this*/
+
+%macro ptout;
+data patientthru2013_trans2;
+  set patientthru2013_trans;
+  out_1 = outtemp_1;
+  %do i = 2 %to 52;
+    %let int = %eval(&i-1);
+    if length(outtemp_&i) ne . and length(outtemp_&int) ne . and length(outtemp_&i) > length(outtemp_&int) then out_&i = substr(outtemp_&i,1,(length(outtemp_&i)-length(outtemp_&int))); 
+  %end;
+run;
+%mend ptout;
+
+%ptout;
+
+proc contents data=patientthru2013_trans2 varnum;
+run;
+
+%verify(patientthru2013_trans2);
+
+/* Examine how many records have a possibly accidental fewer record
+   outcomes then patients - total n=66 of these 58 had only one outcome
+   reported. Potentially, it was intended that the same outcome
+   intended for all patients; however, given the proportion of
+   occurence is so low (i.e., will not sig alter results) will leave
+   as-is.
+
+%macro dataobssub;
+  %do i = 2 %to 52;
+  %let int = %eval(&i-1);
+	data test&i;
+	  set patientthru2013_trans2;
+	  where out_&i. ne '' and out_&int. = '';
+	run;
+  %end;
+%mend dataobssub;
+
+%dataobssub;
+
+data testconcat;
+  set test2  test3  test4  test5  test6  test7  test8  test9  test10 test11
+      test12 test13 test14 test15 test16 test17 test18 test19 test20;
+run;
+
+proc print data=testconcat;
+  id MDR_Report_Key;
+run;
+*/
+
+*Drop outtemp_# vars and store results as a permanent file;
+data thesis.patientthru2013_trans (index=(MDR_Report_Key Date_Rcvd MDR_Dt=(MDR_Report_Key Date_Rcvd)));
+  set patientthru2013_trans2 (drop=outtemp_1-outtemp_52);
+  format out_1-out_52 $250.;
+  informat out_1-out_52 $250.;
+run;
+
+proc contents data=thesis.patientthru2013_trans varnum;
+run;
+
+%verify(thesis.patientthru2013_trans);
+
+/***************** Transpose back to original form *******************/
+
+data new_patientthru2013 (drop=out_1-out_52
+  index=(MDR_Report_Key Pt_Seq_No MDR_Pt=(MDR_Report_Key Pt_Seq_No)));
+  set thesis.patientthru2013_trans;
+  array out_[52];
+  do Pt_Seq_No = 1 to 52;
+    Parsed_Outcome = out_[Pt_Seq_No];
+    if not missing(Parsed_Outcome) then output;
+  end;
+run;
+
+%verify(new_patientthru2013);
+
+/*Some outcome records end in a semi-colon, while others don't. Add
+  semi-colon to those that don't - i,e., those with odd parsed_outcome
+  lengths greater than 1 */
+data pt_parsed_out_merge;
+  merge thesis.patientthru2013(in=o) new_patientthru2013(in=t);
+  by MDR_Report_Key Pt_Seq_No;
+  if t=1 then source = 'Trans';
+  else source = 'Orig';
+  length_parsed_out = length(parsed_outcome); *Not required, but leave in for verication;
+  *Find records having an odd-valued length;
+  mod=.;
+  *SAS character strings always have a LENGTH of 1 or more, even when blank, hence look for records having length > 1;
+  if length(parsed_outcome) > 1 then mod=mod(length(parsed_outcome),2); 
+  *Add semicolon to those records that don't end in one - i.e., those having an odd-valued length;
+  if mod ne 1 then Parsed_Outcome_Mod=Parsed_Outcome;
+    else if mod=1 then Parsed_Outcome_Mod=trim(Parsed_Outcome)||';';
+  *Verify that all lengths are now even;
+  mod_verify = .;
+  if length(Parsed_Outcome_Mod) > 1 then mod_verify=mod(length(Parsed_Outcome_Mod),2);
+run;
+	/* Verify Data */
+	proc freq data=pt_parsed_out_merge;
+	  tables source pt_seq_no / missing;
+	run;
+
+	%verify(pt_parsed_out_merge);
+
+	proc print data=pt_parsed_out_merge (obs=50);
+	  where mod=1;
+	run;
+
+	proc means data=pt_parsed_out_merge;
+	  var length_parsed_out mod mod_verify;
+	run;
+/***** Parse New Parsed_Outcome Variable into its residual parts *****/
+data pt_count1;
+  length Parsed_Outcome_Mod $ 30;
+  format Parsed_Outcome_Mod $30.;
+  informat Parsed_Outcome_Mod $30.;
+  set pt_parsed_out_merge (drop=outcome Parsed_Outcome length_parsed_out mod mod_verify);
+  n_outcome = countw(parsed_outcome_mod,";")-1;
+run;
+
+proc means data=pt_count1;
+  var n_outcome;
+run;
+
+data unpacked_outcome;
+  set pt_count1;
+  array out[7] $ 1 out1-out7;
+    do i = 1 to 7;
+      out[i] = scan(parsed_outcome_mod,i,',;1234567');
+    end;
+  drop i;
+run;
+
+	/* Verify counts of parsed outcomes - compare these to total number of outcomes across all types */
+	proc freq data=unpacked_outcome;
+	  tables n_outcome n_outcome*(source out1-out7) / norow nocol nopercent missing;
+	run;
+
+proc contents data=unpacked_outcome; run;
+%verify(unpacked_outcome);
+
+/* One record has an invalid outcome code of "N". Use of a format assigns this value to 
+   the standard invalid value code */
+proc freq data=unpacked_outcome;
+  tables out1-out7 / missing;
+  format out1-out7 $outcome.;
+run;
+
+/* Create indicator variables for each outcome */
+data unpacked_outcome_rev;
+  set unpacked_outcome;
+  Life_Threatening=Hospitalization=Disability=Congenital_Anomaly=Required_Intervention=Other=Invalid_Data=Unknown=No_Information=Not_Applicable=Death=.;
+  if out1 = 'L' or out2 = 'L'  or out3 = 'L' or out4 = 'L' or out5 = 'L' or out6 = 'L' or out7 = 'L'
+	then Life_Threatening = 1; else Life_Threatening = 0;
+  if out1 = 'H' or out2 = 'H'  or out3 = 'H' or out4 = 'H' or out5 = 'H' or out6 = 'H' or out7 = 'H'
+	then Hospitalization = 1; else Hospitalization = 0;
+  if out1 = 'S' or out2 = 'S'  or out3 = 'S' or out4 = 'S' or out5 = 'S' or out6 = 'S' or out7 = 'S'
+    then Disability = 1; else Disability = 0;
+  if out1 = 'C' or out2 = 'C'  or out3 = 'C' or out4 = 'C' or out5 = 'C' or out6 = 'C' or out7 = 'C'
+	then Congenital_Anomaly = 1; else Congenital_Anomaly = 0;
+  if out1 = 'R' or out2 = 'R'  or out3 = 'R' or out4 = 'R' or out5 = 'R' or out6 = 'R' or out7 = 'R'
+    then Required_Intervention = 1; else Required_Intervention = 0;
+  if out1 = 'O' or out2 = 'O'  or out3 = 'O' or out4 = 'O' or out5 = 'O' or out6 = 'O' or out7 = 'O'
+    then Other = 1; else Other = 0;
+  if out1 = '*' or out2 = '*'  or out3 = '*' or out4 = '*' or out5 = '*' or out6 = '*' or out7 = '*'
+  or out1 = 'N' or out2 = 'N'  or out3 = 'N' or out4 = 'N' or out5 = 'N' or out6 = 'N' or out7 = 'N'
+    then Invalid_Data = 1; else Invalid_Data = 0;
+  if out1 = 'U' or out2 = 'U'  or out3 = 'U' or out4 = 'U' or out5 = 'U' or out6 = 'U' or out7 = 'U'
+    then Unknown = 1; else Unknown = 0;
+  if out1 = 'I' or out2 = 'I'  or out3 = 'I' or out4 = 'I' or out5 = 'I' or out6 = 'I' or out7 = 'I'
+  or out1 = '' or out2 = ''  or out3 = '' or out4 = '' or out5 = '' or out6 = '' or out7 = ''
+    then No_Information = 1; else No_Information = 0; *No info for all records when combine across all outcomes;
+  if out1 = 'A' or out2 = 'A'  or out3 = 'A' or out4 = 'A' or out5 = 'A' or out6 = 'A' or out7 = 'A'
+    then Not_Applicable = 1; else Not_Applicable = 0;
+  if out1 = 'D' or out2 = 'D'  or out3 = 'D' or out4 = 'D' or out5 = 'D' or out6 = 'D' or out7 = 'D'
+    then Death  = 1; else Death = 0;
+run;
+
+	/* Verify coding */
+	proc freq data=unpacked_outcome_rev;
+	  tables out1-out7 Life_Threatening Hospitalization Disability Congenital_Anomaly Required_Intervention Other Invalid_Data Unknown No_Information Not_Applicable Death out1-out7 / missing ;
+	run;
+
+    %verify(unpacked_outcome_rev);
+
+data ptthru2013_parsed_out (index=(MDR_Report_Key Pt_Seq_No MDR_Pt=(MDR_Report_Key Pt_Seq_No)));
+  set unpacked_outcome_rev (rename=(Life_Threatening=Outcome_LifeThreat Hospitalization=Outcome_Hosp
+          Disability=Outcome_Disability Congenital_Anomaly=Outcome_CongAb Required_Intervention=Outcome_ReqInt
+          Other=Outcome_Other Invalid_Data=Outcome_InvalData Unknown=Outcome_Unk No_Information=Outcome_NoInfo
+          Not_Applicable=Outcome_NA Death=Outcome_Death));
+run;
+
+**********************************************************************
+Keep (only) final variables of potential interest in analysis
+Treatment not informative for dissertation analysis purposes
+*********************************************************************;
+
+data thesis.ptthru2013_parsed_out (index=(MDR_Report_Key Pt_Seq_No MDR_Pt=(MDR_Report_Key Pt_Seq_No)));
+  set ptthru2013_parsed_out (drop=Date_Rcvd Parsed_Outcome_Mod out1-out7 source);
+run;
+
+%verify(thesis.ptthru2013_parsed_out);
+
+proc print data=thesis.ptthru2013_parsed_out (obs=20); run;
+proc contents data=thesis.ptthru2013_parsed_out varnum; run;
