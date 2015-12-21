@@ -1,0 +1,120 @@
+*********************************************************************** 
+Program Name: Import FOI Class 
+
+Date Last Modified: -1-JULY-2014
+
+Purpose: To import FOI Class Code Assignments from http://www.fda.gov/MedicalDevices/DeviceRegulationandGuidance/Overview/ClassifyYourDevice/ucm051668.htm#sti 
+http://www.fda.gov/MedicalDevices/DeviceRegulationandGuidance/Overview/ClassifyYourDevice/ucm051668.htm#sti
+
+Inputs:  00 Pathnames and Options.sas
+         foiclass 17-FEB-2014.txt
+
+SAS Data Outputs: mdrfoiclass
+
+----------------------------------------------------------------------- 
+Macros: NA
+**********************************************************************;
+
+data thesis.foiclass (drop=Unclass_Reason GMPExemptFlag ThirdPartyFlag
+                           Review_COde Reg_Number Physical_State
+						   Tech_Method Target_Area);
+  %let _EFIERR_ = 0; 
+  infile "&MAUDE\foiclass_17-FEB-2014.txt" firstobs=2
+  delimiter = '|' MISSOVER DSD lrecl=32760 TERMSTR=CRLF;
+
+  informat Review_Panel $5.; 
+  informat Medical_Spec $2.;
+  informat Prod_Code  $3.;
+  informat Dev_Name $120.;
+  informat Dev_Class $1.;
+  informat Unclass_Reason best2.;
+  informat GMPExemptFlag $1.;
+  informat ThirdPartyFlag $1.;
+  informat Review_COde $1.;
+  informat Reg_Number best12.;
+  informat Submission_Type best2.;
+  informat Definition $928.;
+  informat Physical_State $1024.;
+  informat Tech_Method $1024.;
+  informat Target_Area $1024.;
+
+  format Review_Panel $5.; 
+  format Medical_Spec $2.;
+  format Prod_Code  $3.;
+  format Dev_Name $120.;
+  format Dev_Class $1.;
+  format Unclass_Reason best2.;
+  format GMPExemptFlag $1.;
+  format ThirdPartyFlag $1.;
+  format Review_COde $1.;
+  format Reg_Number best12.;
+  format Submission_Type best2.;
+  format Definition $928.;
+  format Physical_State $1024.;
+  format Tech_Method $1024.;
+  format Target_Area $1024.;
+
+  input
+  Review_Panel $ 
+  Medical_Spec $
+  Prod_Code  $
+  Dev_Name $
+  Dev_Class $
+  Unclass_Reason
+  GMPExemptFlag $
+  ThirdPartyFlag $
+  Review_COde $
+  Reg_Number
+  Submission_Type
+  Definition $
+  Physical_State $
+  Tech_Method $
+  Target_Area $
+  ;
+
+  if _ERROR_ then call symputx('_EFIERR_',1);  
+run;
+
+proc print data=thesis.foiclass (obs=10);
+  where Definition ne '';
+run;
+
+proc contents data=thesis.foiclass;
+run;
+
+proc freq data=thesis.foiclass;
+  tables Review_Panel Medical_Spec Review_Panel*Medical_Spec/ list missing;
+run;
+
+proc print data=thesis.foiclass (obs=10);
+  where Review_Panel ne Medical_Spec;
+run;
+
+data test;
+  length Prod_Grp $10;
+  format Prod_Grp $10.;
+  informat Prod_Grp $10.;
+  set thesis.foiclass;
+  Prod_Grp = '';
+  if Review_Panel = Medical_Spec and Review_Panel ne '' and Medical_Spec ne '' then Prod_Grp = Review_Panel;
+    else if Review_Panel ne '' and Medical_Spec =  '' then Prod_Grp = Review_Panel;
+    else if Review_Panel =  '' and Medical_Spec ne '' then Prod_Grp = Medical_Spec;
+    else if Review_Panel ne '' and Medical_Spec ne '' then Prod_Grp = Review_Panel;
+	else Prod_Grp = 'Unassigned';
+run;
+
+proc freq data=test order=freq;
+  tables Prod_Grp / missing;
+  format Prod_Grp $prodgrp.;
+run;
+proc freq data=test;
+  tables Prod_Grp Review_Panel Review_Panel*Prod_Grp/ list missing;
+run;
+
+proc print data=test;
+  where Prod_Grp = '';
+run;
+
+proc print data=test;
+  where Prod_Grp='CV';
+run;
