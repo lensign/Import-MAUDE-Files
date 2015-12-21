@@ -1,0 +1,139 @@
+*********************************************************************** 
+Program Name: Import MAUDE FOI Text
+
+Date Last Modified: 17-December-2015
+
+Purpose: To read in FDA MAUDE text and textchange files. This
+         program and the Create text data subset for merging program 
+         were originally a single program. However, the programs were
+         separated out to maintain better distinction between the 
+         Create and Merge processes.
+
+Inputs:  00 Pathnames and Options.sas
+         foitextthru1995.txt
+         foitext####.txt (where #=1996-2013)
+         foitextchange.txt
+         foitext.txt (2013)
+
+SAS Data Outputs: base.foitextthru1995.txt
+                  base.foitext####.txt (where #=1996-2013)
+                  base.foitextthru1995.txt
+                  base.textthru2013
+
+----------------------------------------------------------------------- 
+Macros: None
+**********************************************************************;
+
+**********************************************************************
+Import individual (year) text files. Informat and Format lengths were
+were first determined using proc import, selecting the maximum
+value for each variable and then adding a pad (approx 10%) to account
+for future file uploads having a greater length.  The SAS log was also
+reviewed and variable lengths adjusted if the maximum record length
+indicated truncation occurred.
+*********************************************************************;
+
+%macro importtext (outdata,indata);
+data &outdata (index=(MDR_Text_Key));
+  %let _EFIERR_ = 0; 
+  infile "&MAUDE\&indata"
+  delimiter = '|' MISSOVER DSD lrecl=32760 TERMSTR=CRLF;
+
+  informat MDR_Report_Key best32. ;
+  informat MDR_Text_Key best32. ;
+  informat Text_Type_Code $1. ;
+  informat Pt_Seq_No best32. ;
+  informat Date_Report mmddyy10. ;
+  informat Text $31000. ;
+
+  format MDR_Report_Key best12. ;
+  format MDR_Text_Key best12. ;
+  format Text_Type_Code $1. ;
+  format Pt_Seq_No best12. ;
+  format Date_Report mmddyy10. ;
+  format Text $31000. ;
+
+  input
+    MDR_Report_Key
+    MDR_Text_Key
+    Text_Type_Code $
+	Pt_Seq_No
+    Date_Report
+    Text $
+     ;
+  if _ERROR_ then call symputx('_EFIERR_',1);  
+run;
+
+proc contents data=&outdata order=varnum;
+run;
+
+proc print data=&outdata (obs=10);
+run;
+
+*Compare lowest and highest observations to txt file to ensure all recrods are included;
+	proc univariate data=&outdata;
+	  var MDR_Report_Key;
+	run;
+
+%mend;
+
+%importtext(base.foitextthru1995,foitextthru1995.txt);
+%importtext(base.foitext1996,foitext1996.txt);
+%importtext(base.foitext1997,foitext1997.txt);
+%importtext(base.foitext1998,foitext1998.txt);
+%importtext(base.foitext1999,foitext1999.txt);
+%importtext(base.foitext2000,foitext2000.txt);
+%importtext(base.foitext2001,foitext2001.txt);
+%importtext(base.foitext2002,foitext2002.txt);
+%importtext(base.foitext2003,foitext2003.txt);
+%importtext(base.foitext2004,foitext2004.txt);
+%importtext(base.foitext2005,foitext2005.txt);
+%importtext(base.foitext2006,foitext2006.txt);
+%importtext(base.foitext2007,foitext2007.txt);
+%importtext(base.foitext2008,foitext2008.txt);
+%importtext(base.foitext2009,foitext2009.txt);
+%importtext(base.foitext2010,foitext2010.txt);
+%importtext(base.foitext2011,foitext2011.txt);
+%importtext(base.foitext2012,foitext2012.txt);
+%importtext(base.foitext2013,foitext2013.txt);
+*%importtext(base.foitextcurrent,foitext.txt); /*Adds in current year info - remove comment out indicators here and code section below to include this data*/
+%importtext(base.foitextchange,foitextChange.txt);
+
+**********************************************************************
+Combine all yearly text dataset files
+*********************************************************************;
+data base.textthru2013_raw(index=(MDR_Report_Key MDR_Text_Key));
+  set base.foitextthru1995 (in=textthru1995) base.foitext1996 (in=text1996)
+      base.foitext1997 (in=text1997) base.foitext1998 (in=text1998)
+      base.foitext1999 (in=text1999) base.foitext2000 (in=text2000)
+      base.foitext2001 (in=text2001) base.foitext2002 (in=text2002)
+      base.foitext2003 (in=text2003) base.foitext2004 (in=text2004)
+	  base.foitext2005 (in=text2005) base.foitext2006 (in=text2006)
+      base.foitext2007 (in=text2007) base.foitext2008 (in=text2008)
+      base.foitext2009 (in=text2009) base.foitext2010 (in=text2010)
+      base.foitext2011 (in=text2011) base.foitext2012 (in=text2012)
+      base.foitext2013 (in=text2013) /* base.foitext (in=textcurrent) */ ;
+  by MDR_Text_Key;
+  if textthru1995 then from = 'textthru1995';
+  if text1996 then from = 'text1996';
+  if text1997 then from = 'text1997';
+  if text1998 then from = 'text1998';
+  if text1999 then from = 'text1999';
+  if text2000 then from = 'text2000';
+  if text2001 then from = 'text2001';
+  if text2002 then from = 'text2002';
+  if text2003 then from = 'text2003';
+  if text2004 then from = 'text2004';
+  if text2005 then from = 'text2005';
+  if text2006 then from = 'text2006';
+  if text2007 then from = 'text2007';
+  if text2008 then from = 'text2008';
+  if text2009 then from = 'text2009';
+  if text2010 then from = 'text2010';
+  if text2011 then from = 'text2011';
+  if text2012 then from = 'text2012';
+  if text2013 then from = 'text2013';
+run;
+
+proc contents data=base.textthru2013_raw; run;
+
