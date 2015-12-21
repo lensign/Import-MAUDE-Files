@@ -1,0 +1,306 @@
+*********************************************************************** 
+Program Name: Import MAUDE MDR FOI 
+
+Date Last Modified: 29-MARCH-2015
+
+Purpose: To import FDA MAUDE mdrfoi files. 
+
+Inputs:  00 Pathnames and Options.sas
+         mdrfoithru2013.txt
+         mdrfoiChange.txt
+         mdrfoiadd.txt (for validation checking) 
+
+SAS Data Outputs: mdrfoithru2013_raw
+                  mdrfoichange
+                  mdrfoithru2013
+
+----------------------------------------------------------------------- 
+Macros: importmdr - to standardize data import
+**********************************************************************;
+
+**********************************************************************
+Read in base MDR file. Informat and Format lengths were first
+determined using proc import, selecting the maximum value for each 
+variable and then adding a pad (approx 10%) to account for future file
+uploads having a greater length. The SAS log was also reviewed and
+variable lengths adjusted if the maximum record length indicated
+truncation occurred.
+
+Contact name and address variables not of interest to this analysis
+were removed at the time of import and an index was created to
+facilitate subsequent merging.
+*********************************************************************;
+
+%macro importmdr (outdata,indata);
+data &outdata (index=(MDR_Report_Key Event_Key
+               MDR_EVT=(MDR_Report_Key Event_Key))
+
+               keep=MDR_Report_Key Event_Key Report_No Report_Source_Code
+               No_Devices_in_Event No_Pts_in_Event Date_Rcvd AE_Flag
+               Product_Problem_Flag Report_Date_3500B4 Date_of_Event
+               Date_Facility_Aware Report_Type Report_Date_3500F8
+               Report_to_FDA Date_Report_to_FDA Event_Location
+               Report_to_Mfr Date_Report_to_Mfr Mfr_Name Source_Type
+               Date_Mfr_Rcvd Device_Date_Mfg Remedial_Action
+               Removal_Correction_No Event_Type);
+  %let _EFIERR_ = 0; 
+  infile "&MAUDE\&indata" firstobs=2
+  delimiter = '|' MISSOVER DSD lrecl=32760 TERMSTR=CRLF;
+
+  informat MDR_Report_Key BEST32. ;
+  informat Event_Key BEST32. ;
+  informat Report_No $21. ;
+  informat Report_Source_Code $1.;
+  informat No_Devices_in_Event BEST32.;
+  informat No_Pts_in_Event BEST32.;
+  informat Date_Rcvd MMDDYY10.;
+  informat AE_Flag $1.;
+  informat Product_Problem_Flag $1. ;
+  informat Report_Date_3500B4 MMDDYY10.;
+  informat Date_of_Event MMDDYY10.;
+  informat Date_Facility_Aware MMDDYY10. ;
+  informat Report_Type $3.;
+  informat Report_Date_3500F8 MMDDYY10.;
+  informat Report_to_FDA $1. ;
+  informat Date_Report_to_FDA MMDDYY10.;
+  informat Event_Location $3.;
+  informat Report_to_Mfr $1. ;
+  informat Date_Report_to_Mfr MMDDYY10. ;
+  informat Mfr_Name $1000.;
+  informat Source_Type $5. ;
+  informat Date_Mfr_Rcvd MMDDYY10. ;
+  informat Device_Date_Mfg MMDDYY10. ;
+  informat Remedial_Action $2. ;
+  informat Removal_Correction_No $30. ;
+  informat Event_Type $2. ; 
+
+  format MDR_Report_Key BEST12. ;
+  format Event_Key BEST12. ;
+  format Report_No $21. ;
+  format Report_Source_Code $1.;
+  format No_Devices_in_Event BEST12.;
+  format No_Pts_in_Event BEST12.;
+  format Date_Rcvd MMDDYY10.;
+  format AE_Flag $1.;
+  format Product_Problem_Flag $1. ;
+  format Report_Date_3500B4 MMDDYY10.;
+  format Date_of_Event MMDDYY10.;
+  format Date_Facility_Aware MMDDYY10. ;
+  format Report_Type $3.;
+  format Report_Date_3500F8 MMDDYY10.;
+  format Report_to_FDA $1. ;
+  format Date_Report_to_FDA MMDDYY10.;
+  format Event_Location $3.;
+  format Report_to_Mfr $1. ;
+  format Date_Report_to_Mfr MMDDYY10. ;
+  format Mfr_Name $1000.;
+  format Source_Type $5. ;
+  format Date_Mfr_Rcvd MMDDYY10. ;
+  format Device_Date_Mfg MMDDYY10. ;
+  format Remedial_Action $2. ;
+  format Removal_Correction_No $30. ;
+  format Event_Type $2. ;
+
+  input
+    MDR_Report_Key
+	Event_Key
+	Report_No $
+	Report_Source_Code $
+	Mfr_Link_Flag $
+	No_Devices_in_Event
+	No_Pts_in_Event
+	Date_Rcvd
+	AE_Flag $
+	Product_Problem_Flag $
+	Report_Date_3500B4
+	Date_of_Event
+	Single_Use_Flag $
+	Reporter_Occ_Code $
+	Health_Professional $
+	Initial_Report_to_FDA $
+	Dist_Name $
+	Dist_Address_1 $
+	Dist_Address_2 $
+	Dist_City $
+	Dist_State $
+	Dist_Zip $
+	Dist_Zip_Ext $
+	Date_Facility_Aware
+	Report_Type $
+	Report_Date_3500F8
+	Report_to_FDA $
+	Date_Report_to_FDA
+	Event_Location $
+	Report_to_Mfr $
+	Date_Report_to_Mfr
+	Mfr_Name $
+	Mfr_Address_1 $
+	Mfr_Address_2 $
+	Mfr_City $
+	Mfr_State $
+	Mfr_Zip $
+	Mfr_Zip_Ext $
+	Mfr_Country $
+	Mfr_Postal_Code $
+	Mfr_Contact_Title_Name $
+	Mfr_Contact_First_Name $
+	Mfr_Contact_Last_Name $
+	Mfr_Contact_Address_1 $
+	Mfr_Contact_Address_2 $
+	Mfr_Contact_City $
+	Mfr_Contact_State $
+	Mfr_Contact_Zip $
+	Mfr_Contact_Zip_Ext $
+	Mfr_Contact_Country $
+	Mfr_Contact_Postal_Code $
+	Mfr_Contact_Phone_Area_Code $
+	Mfr_Contact_Phone_Exchange $
+	Mfr_Contact_Phone $
+	Mfr_Contact_Phone_Ext $
+	Mfr_Contact_Phone_Country $
+	Mfr_Contact_Phone_City $
+	Mfr_Contact_Phone_Local $
+	Mfr_G1_Name $
+	Mfr_G1_Address_1 $
+	Mfr_G1_Address_2 $
+	Mfr_G1_City $
+	Mfr_G1_State $
+	Mfr_G1_Zip $
+	Mfr_G1_Zip_Ext $
+	Mfr_G1_Country $
+	Mfr_G1_Postal_Code $
+	Source_Type $
+	Date_Mfr_Rcvd
+	Device_Date_Mfg
+	Single_Use_Flag $
+	Remedial_Action $
+	Previous_Use_Code $
+	Removal_Correction_No $
+	Event_Type $
+    ;
+
+  if _ERROR_ then call symputx('_EFIERR_',1);  
+run;
+
+proc print data=&outdata (obs=100);
+run;
+
+proc contents data=&outdata;
+run;
+
+	*Compare lowest and highest observations to txt file to ensure all recrods are included;
+	proc univariate data=&outdata;
+	  var MDR_Report_Key;
+	run;
+
+%mend;
+
+%importmdr(base.mdrfoithru2013_raw, mdrfoithru2013.txt);
+
+/* Combine mdrfoithru#### and current year files - update file name extensions below as necesary */
+/*
+%importmdr(base.mdrfoi2013, mdrfoi.txt);
+
+data mdrfoithru2013 (index=(MDR_Report_Key Event_Key MDR_EVT=(MDR_Report_Key Event_Key))) bothmatch;
+  merge base.mdrfoithru2012 (in=x) base.mdrfoi2013 (in=y);
+  by MDR_Report_Key;
+  if x then from = 'mdrthru2012';
+  if y then from = 'mdr2013';
+  if x=1 and y=1 then output bothmatch;
+  else output mdrfoithru2013;
+run;
+*/
+**********************************************************************
+Read in MDR update data files.
+*********************************************************************;
+
+%importmdr(base.mdrfoichange, mdrfoichange.txt);
+
+*Examine when report was received for the base and updated files;
+proc freq data=base.mdrfoithru2013_raw;
+  tables Date_Rcvd / missing;
+  format Date_Rcvd year.;
+run; 
+proc freq data=base.mdrfoichange;
+  tables Date_Rcvd / missing;
+  format Date_Rcvd year.;
+run; 
+
+**********************************************************************
+Merge the base and updated data sets, keeping only MDR change
+records that match those in the base dataset.
+*********************************************************************;
+
+*Determine records to merge;
+data mdrfoi_match changeonly;
+  merge base.mdrfoithru2013_raw(in=b) base.mdrfoiChange(in=c);
+  by MDR_Report_Key;
+  if b=1 and c=1 then output mdrfoi_match;
+  else if b=0 and c=1 then output changeonly;
+run;
+
+	*Note - verified that Change records not included are those matching records from 2014;
+	%importmdr(mdrfoiadd, mdrfoiadd.txt);
+
+	data all_match base_and_change base_and_add baseonly change_and_add changeonly addonly none;
+	  merge base.mdrfoithru2013_raw(in=b) base.mdrfoiChange(in=c) mdrfoiadd (in=d);
+	  by MDR_Report_Key;
+	  if b=1 and c=1 and d=1 then output all_match;
+	  if b=1 and c=1 and d=0 then output base_and_change;
+	  if b=1 and c=0 and d=1 then output base_and_add;
+	  if b=1 and c=0 and d=0 then output baseonly;
+	  if b=0 and c=1 and d=1 then output change_and_add;
+	  if b=0 and c=1 and d=0 then output changeonly;
+	  if b=0 and c=0 and d=1 then output addonly;
+	  if b=0 and c=0 and d=0 then output none;
+	run;
+
+proc print data=mdrfoi_match (obs=10);
+run;
+proc print data=changeonly (obs=10);
+run;
+proc freq data=changeonly;
+  tables Report_Type / missing;
+run;
+
+*Update mdrfoithru2013 with mdrfoi_match records;
+data base.mdrfoithru2013  (index=(MDR_Report_Key Event_Key MDR_EVT=(MDR_Report_Key Event_Key)));
+  update base.mdrfoithru2013_raw mdrfoi_match;
+  by MDR_Report_Key;
+run;
+
+*Re-check when report was received for the updated file. NOTE: 183 records have missing Date_Rcvd, the
+ majority (n=163) are old records with MDR_Report_Key <=2004;
+proc freq data=base.mdrfoithru2013;
+  tables Date_Rcvd / missing;
+  format Date_Rcvd year.;
+run; 
+
+proc contents data=base.mdrfoithru2013;
+run;
+
+*Explore variables;
+proc freq data=base.mdrfoithru2013;
+  tables Report_Source_Code No_Devices_in_Event No_Pts_in_Event Date_Rcvd AE_Flag
+               Product_Problem_Flag Report_Date_3500B4 Date_of_Event
+               Date_Facility_Aware Report_Type Report_Date_3500F8
+               Report_to_FDA Date_Report_to_FDA Event_Location
+               Report_to_Mfr Date_Report_to_Mfr Source_Type
+               Date_Mfr_Rcvd Device_Date_Mfg Remedial_Action Event_Type / missing;
+  format AE_Flag Product_Problem_Flag Report_to_FDA Event_Location Report_to_Mfr Remedial_Action Event_Type $misscode. 
+         Date_Facility_Aware Date_Mfr_Rcvd Date_Rcvd Date_Report_to_FDA Date_Report_to_Mfr
+         Date_of_Event Device_Date_Mfg Report_Date_3500B4 Report_Date_3500F8 year.;
+run;
+
+**********************************************************************
+Keep (only) final variables of potential interest in analysis
+*********************************************************************;
+
+data thesis.mdrfoithru2013 (index=(MDR_Report_Key Event_Key MDR_EVT=(MDR_Report_Key Event_Key)));
+  set base.mdrfoithru2013
+  (keep=AE_Flag Date_Rcvd Date_of_Event Device_Date_Mfg Event_Key Event_Type MDR_Report_Key
+        Mfr_Name No_Devices_in_Event No_Pts_in_Event Product_Problem_Flag Remedial_Action
+        Report_Source_Code Source_Type Report_Type);
+run;
+proc contents data=thesis.mdrfoithru2013;
+run;
