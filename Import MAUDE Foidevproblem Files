@@ -1,0 +1,105 @@
+*********************************************************************** 
+Program Name: Import MAUDE FOI DEV Problems
+
+Date Last Modified: 03-MARCH-2015
+
+Purpose: To read in the FDA MAUDE DEV Problem file which links
+         MDR_Report_Keys to Problem Codes. 
+
+Inputs:  00 Pathnames and Options.sas
+         foidevproblem.txt
+
+SAS Data Outputs: foidevproblem
+
+----------------------------------------------------------------------- 
+Macros: None
+**********************************************************************;
+
+**********************************************************************
+Import foidevproblem file. NOTE: Prior to import, re-coded
+Device_Problem_Code of first four records (see below) to the FDA Code
+#.
+	2395902|C99179 maps to 3273
+	2322689|C95879 maps to 3265
+	2423534|C95879 maps to 3265
+	1642183|C49755 maps to 3049
+*********************************************************************;
+
+data base.foidevproblem_raw;
+  %let _EFIERR_ = 0; /* set the ERROR detection variable */
+  infile "&MAUDE\foidevproblem.txt"
+  delimiter = '|' MISSOVER DSD lrecl=32760 TERMSTR=CRLF;
+
+  informat MDR_Report_Key best32. ;
+  informat Device_Problem_Code best32. ;
+
+  format MDR_Report_Key best12. ;
+  format Device_Problem_Code best12. ;
+
+  input
+    MDR_Report_Key
+    Device_Problem_Code
+     ;
+  if _ERROR_ then call symputx('_EFIERR_',1);  /* set ERROR detection variable */
+run;
+
+**********************************************************************
+Add a variable that maps to the Device Problem Code Description
+format
+*********************************************************************;
+data base.foidevproblem (index=(MDR_Report_Key));
+  set base.foidevproblem_raw;
+  Device_Problem_Desc = put(Device_Problem_Code,devprobcode.);
+run;
+
+/*
+data base.foidevproblem (index=(MDR_Report_Key));
+  set base.foidevproblem;
+  Device_Problem_Desc = Device_Problem_Code;
+  format Device_Problem_Desc devprobcode.;
+run;
+*/
+proc contents data=base.foidevproblem order=varnum;
+run;
+
+proc print data=base.foidevproblem (obs=100);
+run;
+
+proc freq data=base.foidevproblem order=freq;
+  tables Device_Problem_Code Device_Problem_Desc / missing;
+run;
+proc freq data=base.foidevproblem order=freq;
+  where Device_Problem_Desc = "No Description Available";
+  tables Device_Problem_Code / missing;
+run;
+proc freq data=base.foidevproblem;
+  where Device_Problem_Desc = "No Description Available";
+  tables Device_Problem_Code / missing;
+run;
+
+**********************************************************************
+Transpose data to achieve a dataset where MDR_Report_Key is unique
+*********************************************************************;
+proc transpose data=base.foidevproblem out=thesis.foidevproblem (drop=_name_ index=(MDR_Report_Key)) prefix=DevProbCode_ delim=_ ;
+  by MDR_Report_Key;
+  var Device_Problem_Code;
+run;
+
+proc contents data=thesis.foidevproblem order=varnum;
+run;
+
+proc print data=thesis.foidevproblem (obs=5);
+run;
+
+proc freq data=thesis.foidevproblem;
+  tables DevProbCode_1-DevProbCode_18 / missing;
+  format DevProbCode_1-DevProbCode_18 nmissfmt.;
+run;
+
+proc print data=thesis.foidevproblem;
+  where DevProbCode_9 ne .;
+  format DevProbCode_1-DevProbCode_18 devprobcode.;
+run;
+proc print data=thesis.foidevproblem;
+  where DevProbCode_9 ne .;
+run;
