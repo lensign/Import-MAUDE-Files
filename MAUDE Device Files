@@ -1,0 +1,386 @@
+*********************************************************************** 
+Program Name: Import MAUDE FOI DEV
+
+Date Last Modified: 08-JULY-2014
+
+Purpose: To import FDA MAUDE device files. 
+
+Inputs:  00 Pathnames and Options.sas
+         foidevthru1997.txt
+         foidev####.txt (where #=1998-2013)
+         foidevchange.txt
+         foidevadd.txt (for validation checking) 
+
+SAS Data Outputs: foi####.txt (where #=1998-2013)
+                  foidevthru1997.txt
+                  foidevchange
+                  devthru2013
+                  devthru2013_sub
+
+----------------------------------------------------------------------- 
+Macros: importdev - to standardize data import
+**********************************************************************;
+
+**********************************************************************
+Import individual (year) device files. Informat and Format lengths
+were first determined using proc import, selecting the maximum
+value for each variable and then adding a pad (approx 10%) to account
+for future file uploads having a greater length.  The SAS log was also
+reviewed and variable lengths adjusted if the maximum record length
+indicated truncation occurred.
+
+Address variables not of interest to this analysis were removed at
+the time of import and an index was created to facilitate subsequent
+merging.
+*********************************************************************;
+
+%macro importdev (outdata,indata);
+data &outdata (index=(Device_Event_Key MDR_Report_Key Device_Seq_No
+               DEV_MDR_SEQ=(Device_Event_Key MDR_Report_Key Device_Seq_No))
+
+               drop= Mfr_Address_1 Mfr_Address_2 Mfr_City Mfr_Country
+                     Mfr_Postal_Code Mfr_State Mfr_Zip Mfr_Zip_Ext);
+   %let _EFIERR_ = 0; /* set the ERROR detection variable */
+   infile "&MAUDE\&indata"
+   delimiter = '|' MISSOVER DSD lrecl=32767 firstobs=2  TERMSTR=CRLF;
+
+   informat MDR_Report_Key best32. ;
+   informat Device_Event_Key best32. ;
+   informat Implant_Flag $1. ;
+   informat Date_Removed_Flag $1. ;
+   informat Device_Seq_No best32. ;
+   informat Date_Rcvd mmddyy10. ;
+   informat Brand_Name $400. ;
+   informat Generic_Name $300. ;
+   informat Mfr_Name $100. ;
+   informat Mfr_Address_1 $300. ;
+   informat Mfr_Address_2 $100. ;
+   informat Mfr_City $50. ;
+   informat Mfr_State $2. ;
+   informat Mfr_Zip $10. ;
+   informat Mfr_Zip_Ext $10. ;
+   informat Mfr_Country $2. ;
+   informat Mfr_Postal_Code $10. ;
+   informat Device_Expiration_Date mmddyy10. ;
+   informat Model_No $100. ;
+   informat Lot_No $30. ;
+   informat Catalog_No $30. ;
+   informat Other_ID_No $150. ;
+   informat Device_Operator $3. ;
+   informat Device_Availability $1. ;
+   informat Date_Returned mmddyy10. ;
+   informat Device_Report_Product_Code $3. ;
+   informat Device_Age $10. ;
+   informat Device_Evaluated_by_Mfr $1. ;
+   informat Baseline_Brand_Name $150. ;
+   informat Baseline_Generic_Name $100. ;
+   informat Baseline_Model_No $70. ;
+   informat Baseline_Catalog_No $40. ;
+   informat Baseline_Other_ID_No $40. ;
+   informat Baseline_Device_Family $100. ;
+   informat Baseline_Label_Shelf_Life $1. ;
+   informat Baseline_Shelf_Life_in_Mos $5. ;
+   informat Baseline_PMA_Flag $1. ;
+   informat Baseline_PMA_No $15. ;
+   informat Baseline_510k_Flag $1. ;
+   informat Baseline_510k_No $10. ;
+   informat Baseline_Preamendment $1. ;
+   informat Baseline_Transitional $1. ;
+   informat Baseline_510k_Exempt_Flag $1. ;
+   informat Baseline_Date_First_Mktd mmddyy10. ;
+   informat Baseline_Date_Ceased_Mktg mmddyy10. ;
+
+   format MDR_Report_Key best12. ;
+   format Device_Event_Key best12. ;
+   format Implant_Flag $1. ;
+   format Date_Removed_Flag $1. ;
+   format Device_Seq_No best12. ;
+   format Date_Rcvd mmddyy10. ;
+   format Brand_Name $400. ;
+   format Generic_Name $300. ;
+   format Mfr_Name $100. ;
+   format Mfr_Address_1 $300. ;
+   format Mfr_Address_2 $100. ;
+   format Mfr_City $50. ;
+   format Mfr_State $2. ;
+   format Mfr_Zip $10. ;
+   format Mfr_Zip_Ext $10. ;
+   format Mfr_Country $2. ;
+   format Mfr_Postal_Code $10. ;
+   format Device_Expiration_Date mmddyy10. ;
+   format Model_No $100. ;
+   format Lot_No $30. ;
+   format Catalog_No $30. ;
+   format Other_ID_No $150. ;
+   format Device_Operator $3. ;
+   format Device_Availability $1. ;
+   format Date_Returned mmddyy10. ;
+   format Device_Report_Product_Code $3. ;
+   format Device_Age $10. ;
+   format Device_Evaluated_by_Mfr $1. ;
+   format Baseline_Brand_Name $150. ;
+   format Baseline_Generic_Name $100. ;
+   format Baseline_Model_No $70. ;
+   format Baseline_Catalog_No $40. ;
+   format Baseline_Other_ID_No $40. ;
+   format Baseline_Device_Family $100. ;
+   format Baseline_Label_Shelf_Life $1. ;
+   format Baseline_Shelf_Life_in_Mos $5. ;
+   format Baseline_PMA_Flag $1. ;
+   format Baseline_PMA_No $15. ;
+   format Baseline_510k_Flag $1. ;
+   format Baseline_510k_No $10. ;
+   format Baseline_Preamendment $1. ;
+   format Baseline_Transitional $1. ;
+   format Baseline_510k_Exempt_Flag $1. ;
+   format Baseline_Date_First_Mktd mmddyy10. ;
+   format Baseline_Date_Ceased_Mktg mmddyy10. ;
+
+   input @; 
+     _infile_=transtrn(_infile_,'|"|','||'); 
+   input
+            MDR_Report_Key
+            Device_Event_Key
+            Implant_Flag $
+            Date_Removed_Flag $
+            Device_Seq_No
+            Date_Rcvd
+            Brand_Name $
+            Generic_Name $
+            Mfr_Name $
+            Mfr_Address_1 $
+            Mfr_Address_2 $
+            Mfr_City $
+            Mfr_State $
+            Mfr_Zip $
+            Mfr_Zip_Ext $
+            Mfr_Country $
+            Mfr_Postal_Code $
+            Device_Expiration_Date
+            Model_No $
+            Lot_No $
+            Catalog_No $
+            Other_ID_No $
+            Device_Operator $
+            Device_Availability $
+            Date_Returned
+            Device_Report_Product_Code $
+            Device_Age $
+            Device_Evaluated_by_Mfr $
+            Baseline_Brand_Name $
+            Baseline_Generic_Name $
+            Baseline_Model_No $
+            Baseline_Catalog_No $
+            Baseline_Other_ID_No $
+            Baseline_Device_Family $
+            Baseline_Label_Shelf_Life $
+            Baseline_Shelf_Life_in_Mos $
+            Baseline_PMA_Flag $
+            Baseline_PMA_No $
+            Baseline_510k_Flag $
+            Baseline_510k_No $
+            Baseline_Preamendment $
+            Baseline_Transitional $
+            Baseline_510k_Exempt_Flag $
+            Baseline_Date_First_Mktd
+            Baseline_Date_Ceased_Mktg
+;
+if _ERROR_ then call symputx('_EFIERR_',1);  /* set ERROR detection variable */
+run;
+
+proc contents data=&outdata;
+run;
+
+proc print data=&outdata (obs=10);
+run;
+
+*Compare lowest and highest observations to txt file to ensure all recrods are included;
+	proc univariate data=&outdata;
+	  var MDR_Report_Key;
+	run;
+
+%mend;
+
+%importdev(base.foidevthru1997,foidevthru1997.txt);
+%importdev(base.foidev1998,foidev1998.txt);
+%importdev(base.foidev1999,foidev1999.txt);
+%importdev(base.foidev2000,foidev2000.txt);
+%importdev(base.foidev2001,foidev2001.txt);
+%importdev(base.foidev2002,foidev2002.txt);
+%importdev(base.foidev2003,foidev2003.txt);
+%importdev(base.foidev2004,foidev2004.txt);
+%importdev(base.foidev2005,foidev2005.txt);
+%importdev(base.foidev2006,foidev2006.txt);
+%importdev(base.foidev2007,foidev2007.txt);
+%importdev(base.foidev2008,foidev2008.txt);
+%importdev(base.foidev2009,foidev2009.txt);
+%importdev(base.foidev2010,foidev2010.txt);
+%importdev(base.foidev2011,foidev2011.txt);
+%importdev(base.foidev2012,foidev2012.txt);
+%importdev(base.foidev2013,foidev2013.txt);
+*%importdev(base.foidevcurrent,foidev.txt); /*Adds in current year info - remove comment out indicators here and code section below to include this data*/
+%importdev(base.foidevchange,foidevChange.txt);
+
+
+**********************************************************************
+Combine all device dataset files.
+*********************************************************************;
+data foidevthru2013
+  (index=(Device_Event_Key MDR_Report_Key Device_Seq_No
+          DEV_MDR_SEQ=(Device_Event_Key MDR_Report_Key Device_Seq_No)));
+  set base.foidevthru1997 (in=devthru1997) base.foidev1998 (in=dev1998)
+      base.foidev1999 (in=dev1999) base.foidev2000 (in=dev2000)
+      base.foidev2001 (in=dev2001) base.foidev2002 (in=dev2002)
+      base.foidev2003 (in=dev2003) base.foidev2004 (in=dev2004)
+	  base.foidev2005 (in=dev2005) base.foidev2006 (in=dev2006)
+      base.foidev2007 (in=dev2007) base.foidev2008 (in=dev2008)
+      base.foidev2009 (in=dev2009) base.foidev2010 (in=dev2010)
+      base.foidev2011 (in=dev2011) base.foidev2012 (in=dev2012)
+      base.foidev2013 (in=dev2013) /* base.foidevchange (in=devcurrent) */ ;
+  by Device_Event_Key MDR_Report_Key Device_Seq_No;
+  if devthru1997 then from = 'devthru1997';
+  if dev1998 then from = 'dev1998';
+  if dev1999 then from = 'dev1999';
+  if dev2000 then from = 'dev2000';
+  if dev2001 then from = 'dev2001';
+  if dev2002 then from = 'dev2002';
+  if dev2003 then from = 'dev2003';
+  if dev2004 then from = 'dev2004';
+  if dev2005 then from = 'dev2005';
+  if dev2006 then from = 'dev2006';
+  if dev2007 then from = 'dev2007';
+  if dev2008 then from = 'dev2008';
+  if dev2009 then from = 'dev2009';
+  if dev2010 then from = 'dev2010';
+  if dev2011 then from = 'dev2011';
+  if dev2012 then from = 'dev2012';
+  if dev2013 then from = 'dev2013';
+  *if devcurrent then from = 'devcurrent';
+run;
+
+proc freq data=foidevthru2013;
+  tables from / missing;
+run;
+
+proc contents data=foidevthru2013;
+run;
+
+*Examine when report was received for the base and updated files;
+proc freq data=foidevthru2013;
+  tables Date_Rcvd / missing;
+  format Date_Rcvd year.;
+run; 
+proc freq data=base.foidevchange;
+  tables Date_Rcvd / missing;
+  format Date_Rcvd year.;
+run; 
+
+**********************************************************************
+Merge the base and updated data sets, keeping only foidevchange
+records that match those in the base foidevthru2013 dataset.
+*********************************************************************;
+
+*Determine records to merge;
+data devchange_match changeonly;
+  merge foidevthru2013(in=b) base.foidevchange(in=c);
+  by Device_Event_Key MDR_Report_Key Device_Seq_No;
+  if b=1 and c=1 then output devchange_match;
+  else if b=0 and c=1 then output changeonly;
+run;
+
+*Update foidevthru2013 with devchange_match records;
+data base.foidevthru2013;
+  update foidevthru2013 devchange_match;
+  by Device_Event_Key MDR_Report_Key Device_Seq_No;
+run;
+
+proc print data=devchange_match (obs=10);
+run;
+proc print data=changeonly (obs=10);
+run;
+
+	/* Note - verified that Change records not included are those matching records from 2014
+	%importdev(foidevadd, foidevadd.txt); */
+
+	data all_match base_and_change base_and_add baseonly change_and_add changeonly addonly none;
+	  merge foidevthru2013(in=b) base.foidevChange(in=c) foidevadd (in=d);
+	  by MDR_Report_Key;
+	  if b=1 and c=1 and d=1 then output all_match;
+	  if b=1 and c=1 and d=0 then output base_and_change;
+	  if b=1 and c=0 and d=1 then output base_and_add;
+	  if b=1 and c=0 and d=0 then output baseonly;
+	  if b=0 and c=1 and d=1 then output change_and_add;
+	  if b=0 and c=1 and d=0 then output changeonly;
+	  if b=0 and c=0 and d=1 then output addonly;
+	  if b=0 and c=0 and d=0 then output none;
+	run;
+
+
+proc contents data=base.foidevthru2013;
+run;
+
+proc freq data= base.foidevthru2013;
+  tables Date_Rcvd;
+  format Date_Rcvd year.;
+run; 
+
+**********************************************************************
+Examine the frequency (sparsity) of variables
+*********************************************************************;
+
+/*proc freq data=base.foidevthru2013; 
+  tables (_numeric_ _character_)*Device_Report_Product_Code /missing norow nopercent; 
+  format _numeric_ nmissfmt.  _character_ $missfmt. Device_Report_Product_Code $cvspec.; 
+run; 
+*/
+proc freq data=base.foidevthru2013; 
+  tables _numeric_ _character_ / missing ; 
+  format _numeric_ nmissfmt.  _character_ $missfmt.; 
+run; 
+proc freq data=base.foidevthru2013 order=freq; 
+  tables Device_Operator Other_ID_No Lot_No / missing ; 
+run; 
+proc print data=base.foidevthru2013 (obs=500); 
+  where Model_No ne '' and Baseline_Model_No ne '';
+  id MDR_Report_Key;
+  var Model_No Baseline_Model_No; 
+run; 
+
+**********************************************************************
+In this project, variables that are very sparsely populated or of such
+broad mixture to not be of interest are removed.
+  * Remove all Baseline variables (except Baseline_Brand_Name,
+    Baseline_Generic_Name and Baseline_Model_No for downstream name
+    searching)as 80% or greater missing.
+  * Date_Returned: 73% missing
+  * Device_Availability: Remove and use Device_Evaluated_by_Mfr
+  * Device_Age: 34% missing. Leave in for now, but if use will
+    require extensive re-coding as currently includes mixture of mo,
+    day, yrinput
+  * Device_Expiration_Date: 68% missing
+  * Device_Operator: 57% health prof (0HP), 25% other lay prof (0LP)
+    & remainder either missing or non-meaninful code
+  * Other_ID_No (56%), Lot_No (80%) : complete hodgepodge, so omit
+  * Data that has good reporting includes: Brand_Name, Date_Rcvd,
+    Implant_Flag, Mfr_Name, Date_Removed_Flag,
+    Device_Report_Product_Code (98%+),
+    Device_Evaluated_by_Mfr, Generic_Name (90+%), Model_No (77%).
+*********************************************************************;
+
+**********************************************************************
+Keep (only) final variables of potential interest in analysis
+*********************************************************************;
+
+data thesis.foidevthru2013 (index=(Device_Event_Key MDR_Report_Key Device_Seq_No
+                 MDR_DEVSEQ=(MDR_Report_Key Device_Seq_No)
+                 DEV_MDR_SEQ=(Device_Event_Key MDR_Report_Key Device_Seq_No)));
+  set base.foidevthru2013
+        (keep=Baseline_Brand_Name Baseline_Generic_Name Baseline_Model_No Brand_Name Date_Rcvd
+              Device_Age Device_Evaluated_by_Mfr Device_Event_Key Device_Report_Product_Code
+              Device_Seq_No Generic_Name MDR_Report_Key Mfr_Name Model_No
+         rename=(Device_Report_Product_Code=DRPC Device_Evaluated_by_Mfr=Dev_Eval_by_Mfr
+                 Date_Rcvd=Date_Rcvd_Dev Mfr_Name=Mfr_Name_Dev Baseline_Brand_Name=Base_Brand_Name
+                 Baseline_Model_No=Base_Model_No Baseline_Generic_Name=Base_Generic_Name));
+run;
+
+proc contents data=thesis.foidevthru2013; run;
